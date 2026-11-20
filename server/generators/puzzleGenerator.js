@@ -107,6 +107,54 @@ function createRandomPath(size, targetLength, random) {
   return search(start) ? [...path] : null;
 }
 
+function classifyGridCell(cell, size) {
+  const row = Math.floor(cell / size);
+  const col = cell % size;
+  const isCorner =
+    (row === 0 || row === size - 1) &&
+    (col === 0 || col === size - 1);
+
+  if (isCorner) return "corner";
+
+  if (row === 0 || row === size - 1 || col === 0 || col === size - 1) {
+    return "edge";
+  }
+
+  return "interior";
+}
+
+function meetsBombPlacementPreference(mode, blockedCells, size) {
+  if (blockedCells.length === 0) return true;
+
+  const counts = { corner: 0, edge: 0, interior: 0 };
+
+  for (const cell of blockedCells) {
+    counts[classifyGridCell(cell, size)]++;
+  }
+
+  if (mode === "Easy") {
+    return counts.corner >= Math.ceil(blockedCells.length / 2);
+  }
+
+  if (mode === "Medium") {
+    return counts.corner >= 1 && (counts.edge >= 1 || counts.interior >= 1);
+  }
+
+  if (mode === "Hard") {
+    const categoryCount = [counts.corner, counts.edge, counts.interior]
+      .filter(count => count > 0).length;
+    const largestCategory = Math.max(counts.corner, counts.edge, counts.interior);
+
+    return categoryCount >= 3 && largestCategory <= Math.floor(blockedCells.length * 0.6);
+  }
+
+  const categoryCount = [counts.corner, counts.edge, counts.interior]
+    .filter(count => count > 0).length;
+  const largestCategory = Math.max(counts.corner, counts.edge, counts.interior);
+
+  return categoryCount === 3 && largestCategory <= Math.ceil(blockedCells.length * 0.5);
+}
+
 function createCheckpoints(path, count, random) {
   if (count === 0) return [];
 
@@ -164,6 +212,10 @@ function generateCandidate(mode, dateKey, attempt) {
     { length: config.size * config.size },
     (_, index) => index
   ).filter(cell => !playableSet.has(cell));
+
+  if (!meetsBombPlacementPreference(mode, blockedCells, config.size)) {
+    return null;
+  }
 
   return {
     dateKey,

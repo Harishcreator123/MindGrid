@@ -115,6 +115,54 @@ function isCorner(cell, size) {
   );
 }
 
+function classifyGridCell(cell, size) {
+  const row = Math.floor(cell / size);
+  const col = cell % size;
+  const isCorner =
+    (row === 0 || row === size - 1) &&
+    (col === 0 || col === size - 1);
+
+  if (isCorner) return "corner";
+
+  if (row === 0 || row === size - 1 || col === 0 || col === size - 1) {
+    return "edge";
+  }
+
+  return "interior";
+}
+
+function meetsBombPlacementPreference(difficulty, blockedCells, size) {
+  if (blockedCells.length === 0) return true;
+
+  const counts = { corner: 0, edge: 0, interior: 0 };
+
+  for (const cell of blockedCells) {
+    counts[classifyGridCell(cell, size)]++;
+  }
+
+  if (difficulty === "Easy") {
+    return counts.corner >= Math.ceil(blockedCells.length / 2);
+  }
+
+  if (difficulty === "Medium") {
+    return counts.corner >= 1 && counts.edge >= 1 && counts.interior >= 1;
+  }
+
+  if (difficulty === "Hard") {
+    const categoryCount = [counts.corner, counts.edge, counts.interior]
+      .filter(count => count > 0).length;
+    const largestCategory = Math.max(counts.corner, counts.edge, counts.interior);
+
+    return categoryCount >= 3 && largestCategory <= Math.floor(blockedCells.length * 0.6);
+  }
+
+  const categoryCount = [counts.corner, counts.edge, counts.interior]
+    .filter(count => count > 0).length;
+  const largestCategory = Math.max(counts.corner, counts.edge, counts.interior);
+
+  return categoryCount === 3 && largestCategory <= Math.ceil(blockedCells.length * 0.5);
+}
+
 function getEndpointCandidates(size, type) {
   const cells = Array.from(
     { length: size * size },
@@ -325,6 +373,10 @@ function buildPuzzle(difficulty, path, bombCount, random) {
     config.checkpointCount
   );
 
+  if (!meetsBombPlacementPreference(difficulty, blockedCells, size)) {
+    return null;
+  }
+
   return {
     id: `MG-${difficulty}-${Math.floor(random() * 1e12)}`,
     difficulty,
@@ -407,6 +459,8 @@ export function generatePuzzle(
       bombCount,
       random
     );
+
+    if (!puzzle) continue;
 
     if (!fallback) fallback = puzzle;
 

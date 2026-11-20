@@ -110,7 +110,8 @@ export async function failGame(
 export async function completeGame(
   mode,
   path,
-  elapsedSeconds
+  elapsedSeconds,
+  bombsSelected = 0
 ) {
   return apiRequest("/api/game/complete", {
     method: "POST",
@@ -118,6 +119,7 @@ export async function completeGame(
       mode,
       path,
       elapsedSeconds,
+      bombsSelected,
     }),
   });
 }

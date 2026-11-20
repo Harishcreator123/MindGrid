@@ -22,24 +22,30 @@ const router = express.Router();
 
 const MODES = ["Easy", "Medium", "Hard", "Challenge"];
 const POINTS_PER_CELL = 10;
-function calculateChallengeScore(path, verifiedSolutions) {
-  let maxCorrectCells = 0;
+function calculateChallengeResult(path, verifiedSolutions) {
+  let correctCells = 0;
 
   for (const solution of verifiedSolutions || []) {
-    let correctCells = 0;
+    let solutionCorrectCells = 0;
 
     for (let i = 0; i < path.length && i < solution.length; i++) {
       if (path[i] !== solution[i]) {
         break;
       }
 
-      correctCells++;
+      solutionCorrectCells++;
     }
 
-    maxCorrectCells = Math.max(maxCorrectCells, correctCells);
+    correctCells = Math.max(correctCells, solutionCorrectCells);
   }
 
-  return maxCorrectCells * POINTS_PER_CELL;
+  const incorrectCells = Math.max(0, path.length - correctCells);
+
+  return {
+    correctCells,
+    incorrectCells,
+    score: correctCells * POINTS_PER_CELL
+  };
 }
 
 function isValidMode(mode) {
@@ -363,8 +369,11 @@ router.post("/fail", protect, async (req, res) => {
 
     const serverElapsed = getElapsedSeconds(modeProgress);
 
-    const partialScore = mode === "Challenge"
-      ? calculateChallengeScore(path, puzzle.verifiedSolutions)
+    const challengeResult = mode === "Challenge"
+      ? calculateChallengeResult(path, puzzle.verifiedSolutions)
+      : null;
+    const partialScore = challengeResult
+      ? challengeResult.score
       : 0;
 
     modeProgress.lastScore = partialScore;
@@ -390,6 +399,8 @@ router.post("/fail", protect, async (req, res) => {
     return res.json({
       success: true,
       score: partialScore,
+      correctCells: challengeResult?.correctCells,
+      incorrectCells: challengeResult?.incorrectCells,
       locked: mode === "Challenge",
       message: mode === "Challenge"
         ? "Daily Challenge attempt recorded."
@@ -408,7 +419,12 @@ router.post("/fail", protect, async (req, res) => {
 // RECORD A VERIFIED COMPLETION
 router.post("/complete", protect, async (req, res) => {
   try {
-    const { mode, path, elapsedSeconds } = req.body;
+    const {
+      mode,
+      path,
+      elapsedSeconds,
+      bombsSelected = 0
+    } = req.body;
 
     if (!isValidMode(mode)) {
       return res.status(400).json({
@@ -446,10 +462,26 @@ router.post("/complete", protect, async (req, res) => {
 
     const serverElapsed = getElapsedSeconds(modeProgress);
 
-    const completionScore = Math.max(
+    if (
+      !Number.isInteger(bombsSelected) ||
+      bombsSelected < 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid bomb information."
+      });
+    }
+
+    const timeScore = Math.max(
       100,
       1000 - serverElapsed * 5
     );
+    const bombPenalty = mode === "Challenge"
+      ? bombsSelected * POINTS_PER_CELL
+      : 0;
+    const completionScore = mode === "Challenge"
+      ? Math.max(0, timeScore - bombPenalty)
+      : timeScore;
 
     modeProgress.status = "completed";
     modeProgress.currentPath = path;
@@ -468,6 +500,9 @@ router.post("/complete", protect, async (req, res) => {
       success: true,
       locked: true,
       score: completionScore,
+      correctCells: mode === "Challenge" ? puzzle.totalPlayable : undefined,
+      bombsSelected: mode === "Challenge" ? bombsSelected : undefined,
+      bombPenalty: mode === "Challenge" ? bombPenalty : undefined,
       completionTime: serverElapsed,
       message: `${mode} completed successfully!`
     });
