@@ -1,6 +1,9 @@
 
 import { useState } from "react";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 function Auth({ onClose, onSuccess }) {
   const [mode, setMode] = useState("login");
   const [name, setName] = useState("");
@@ -19,7 +22,7 @@ function Auth({ onClose, onSuccess }) {
         mode === "register" ? "register" : "login";
 
       const response = await fetch(
-        `http://localhost:5000/api/auth/${endpoint}`,
+        `${API_BASE_URL}/api/auth/${endpoint}`,
         {
           method: "POST",
           headers: {
