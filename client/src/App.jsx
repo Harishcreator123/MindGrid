@@ -1157,20 +1157,6 @@ function App() {
               <p>
                 With daily challenges and multiple practice difficulties, MindGrid brings together learning, strategy, and challenge in one experience. Whether you&apos;re practicing at your own pace or tackling the daily challenge, every puzzle is an opportunity to sharpen your thinking.
               </p>
-              <div className="about-highlights">
-                <div className="about-highlight about-highlight-daily">
-                  <strong>10th Daily Puzzle</strong>
-                  <span>
-                    An independent MindGrid project alongside LinkedIn&apos;s 9 existing daily puzzle games.
-                  </span>
-                </div>
-                <div className="about-highlight about-highlight-practice">
-                  <strong>1st with Built-in Practice Modes</strong>
-                  <span>
-                    Positioned against LinkedIn&apos;s 9 existing daily puzzle games; this is MindGrid&apos;s framing, not an official LinkedIn game or a verified worldwide-first claim.
-                  </span>
-                </div>
-              </div>
               <blockquote className="about-quote">
                 &quot;Think ahead. Find your path. Make every move count.&quot;
               </blockquote>
