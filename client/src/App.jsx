@@ -84,6 +84,7 @@ function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [loadingGame, setLoadingGame] = useState(false);
   const [pendingGame, setPendingGame] = useState(null);
+  const [serverPuzzleValidated, setServerPuzzleValidated] = useState(false);
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       return JSON.parse(
@@ -262,6 +263,7 @@ function App() {
       setDifficulty(selected);
       setGameMode(selectedMode);
       setPuzzle(nextPuzzle);
+      setServerPuzzleValidated(true);
       resetGameState();
 
       if (result.resumed && Array.isArray(savedProgress.currentPath)) {
@@ -388,6 +390,11 @@ function App() {
   };
 
   const handleCellClick = (index) => {
+    if (!serverPuzzleValidated) {
+      changeDifficulty(difficulty, gameMode);
+      return;
+    }
+
     if (completed || failed) return;
 
     if (puzzle.blockedCells.includes(index)) {
@@ -1150,6 +1157,20 @@ function App() {
               <p>
                 With daily challenges and multiple practice difficulties, MindGrid brings together learning, strategy, and challenge in one experience. Whether you&apos;re practicing at your own pace or tackling the daily challenge, every puzzle is an opportunity to sharpen your thinking.
               </p>
+              <div className="about-highlights">
+                <div className="about-highlight about-highlight-daily">
+                  <strong>10th Daily Puzzle</strong>
+                  <span>
+                    An independent MindGrid project alongside LinkedIn&apos;s 9 existing daily puzzle games.
+                  </span>
+                </div>
+                <div className="about-highlight about-highlight-practice">
+                  <strong>1st with Built-in Practice Modes</strong>
+                  <span>
+                    Positioned against LinkedIn&apos;s 9 existing daily puzzle games; this is MindGrid&apos;s framing, not an official LinkedIn game or a verified worldwide-first claim.
+                  </span>
+                </div>
+              </div>
               <blockquote className="about-quote">
                 &quot;Think ahead. Find your path. Make every move count.&quot;
               </blockquote>

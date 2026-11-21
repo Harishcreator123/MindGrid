@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const {
   verifyRouteCount
 } = require("../services/routeCounter");
+const { parseDateKey } = require("../services/dateKey");
+const { getPuzzleFingerprint } = require("../services/puzzleFingerprint");
 
 const GENERATOR_CONFIG = {
   Easy: {
@@ -237,12 +239,11 @@ function generateDailyPuzzle(mode, dateKey, options = {}) {
     throw new Error("Invalid puzzle mode.");
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
-    throw new Error("Invalid puzzle date.");
-  }
+  parseDateKey(dateKey);
 
   const maxAttempts = options.maxAttempts || 300;
   const nodeLimit = options.nodeLimit || 5000000;
+  const excludedFingerprints = new Set(options.excludedFingerprints || []);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const candidate = generateCandidate(
@@ -261,9 +262,19 @@ function generateDailyPuzzle(mode, dateKey, options = {}) {
       continue;
     }
 
+    const verifiedSolutions = verification.solutions;
+    const fingerprint = getPuzzleFingerprint({
+      ...candidate,
+      verifiedSolutions
+    });
+
+    if (excludedFingerprints.has(fingerprint)) {
+      continue;
+    }
+
     return {
       ...candidate,
-      verifiedSolutions: verification.solutions,
+      verifiedSolutions,
       verifiedRouteCount: verification.routeCount,
       verified: true
     };

@@ -1,12 +1,23 @@
 
 const DailyPuzzle = require("../models/DailyPuzzle");
+const DailyProgress = require("../models/DailyProgress");
 const {
   verifyPuzzleIntegrity
 } = require("./puzzleIntegrity");
+const {
+  getPreviousDateKeys
+} = require("./dateKey");
+const {
+  getPuzzleFingerprint
+} = require("./puzzleFingerprint");
+const {
+  UNIQUENESS_DAYS,
+  getPreviousPuzzleFingerprints
+} = require("./puzzleHistory");
+const {
+  generateDailyPuzzle
+} = require("../generators/puzzleGenerator");
 
-const DAILY_PUZZLE_CACHE_TTL_MS = 30 * 60 * 1000;
-const DAILY_PUZZLE_CACHE_MAX_ENTRIES = 32;
-const dailyPuzzleCache = new Map();
 const dailyPuzzleRequests = new Map();
 
 function getPacificDateKey() {
@@ -28,49 +39,78 @@ function getPacificDateKey() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-async function getDailyPuzzle(mode) {
-  const allowedModes = ["Easy", "Medium", "Hard", "Challenge"];
-
-  if (!allowedModes.includes(mode)) {
+async function getDailyPuzzle(mode, userId) {
+  if (!Object.prototype.hasOwnProperty.call(UNIQUENESS_DAYS, mode)) {
     const error = new Error("Invalid game mode.");
     error.statusCode = 400;
     throw error;
   }
 
   const dateKey = getPacificDateKey();
-  const cacheKey = `${dateKey}:${mode}`;
-  const now = Date.now();
+  const requestKey = `${dateKey}:${mode}:${userId || "system"}`;
+  let request = dailyPuzzleRequests.get(requestKey);
 
-  for (const [key, entry] of dailyPuzzleCache) {
-    if (entry.expiresAt <= now) {
-      dailyPuzzleCache.delete(key);
+  if (!request) {
+    request = ensureDailyPuzzleForDate(mode, dateKey, userId);
+    dailyPuzzleRequests.set(requestKey, request);
+  }
+
+  try {
+    return await request;
+  } finally {
+    if (dailyPuzzleRequests.get(requestKey) === request) {
+      dailyPuzzleRequests.delete(requestKey);
+    }
+  }
+}
+
+async function ensureDailyPuzzleForDate(mode, dateKey, userId) {
+  if (!Object.prototype.hasOwnProperty.call(UNIQUENESS_DAYS, mode)) {
+    const error = new Error("Invalid game mode.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const previousDateKeys = getPreviousDateKeys(
+    dateKey,
+    UNIQUENESS_DAYS[mode]
+  );
+  const previousPuzzles = await DailyPuzzle.find({
+    mode,
+    dateKey: { $in: previousDateKeys },
+    verified: true
+  }).select("+verifiedSolutions");
+  const excludedFingerprints = getPreviousPuzzleFingerprints(
+    mode,
+    dateKey,
+    previousPuzzles
+  );
+
+  let puzzle = await DailyPuzzle.findOne({ dateKey, mode })
+    .select("+verifiedSolutions");
+
+  if (!puzzle) {
+    const generatedPuzzle = generateDailyPuzzle(mode, dateKey, {
+      excludedFingerprints
+    });
+
+    try {
+      puzzle = await DailyPuzzle.create(generatedPuzzle);
+    } catch (error) {
+      if (error.code !== 11000) {
+        throw error;
+      }
+
+      puzzle = await DailyPuzzle.findOne({ dateKey, mode })
+        .select("+verifiedSolutions");
+
+      if (!puzzle) {
+        throw error;
+      }
     }
   }
 
-  const cached = dailyPuzzleCache.get(cacheKey);
-  if (cached) {
-    return cached.puzzle;
-  }
-
-  if (dailyPuzzleRequests.has(cacheKey)) {
-    return dailyPuzzleRequests.get(cacheKey);
-  }
-
-  const request = (async () => {
-    const puzzle = await DailyPuzzle.findOne({
-      dateKey,
-      mode,
-      verified: true
-    }).select("+verifiedSolutions");
-
-    if (!puzzle) {
-      const error = new Error(
-        `No verified ${mode} puzzle is available for ${dateKey}.`
-      );
-      error.statusCode = 503;
-      throw error;
-    }
-
+  for (let repairAttempt = 0; repairAttempt < 3; repairAttempt++) {
     const integrity = verifyPuzzleIntegrity(puzzle);
 
     if (!integrity.valid) {
@@ -84,31 +124,94 @@ async function getDailyPuzzle(mode) {
       throw error;
     }
 
-    if (dailyPuzzleCache.size >= DAILY_PUZZLE_CACHE_MAX_ENTRIES) {
-      const oldestKey = dailyPuzzleCache.keys().next().value;
-      if (oldestKey !== undefined) {
-        dailyPuzzleCache.delete(oldestKey);
-      }
+    if (!excludedFingerprints.has(getPuzzleFingerprint(puzzle))) {
+      return puzzle;
     }
 
-    dailyPuzzleCache.set(cacheKey, {
-      puzzle,
-      expiresAt: Date.now() + DAILY_PUZZLE_CACHE_TTL_MS
+    const progressFilter = {
+      dateKey,
+      [`modes.${mode}.attempts`]: { $gt: 0 }
+    };
+    const existingProgress = await DailyProgress.exists(progressFilter);
+
+    if (existingProgress) {
+      const userHasProgress = userId
+        ? await DailyProgress.exists({
+          ...progressFilter,
+          user: userId
+        })
+        : false;
+
+      if (userHasProgress) {
+        console.warn(
+          `Keeping duplicate ${mode} puzzle for ${dateKey} so an existing attempt can continue.`
+        );
+        return puzzle;
+      }
+
+      const error = new Error(
+        "Today's puzzle has existing attempts and cannot be safely replaced."
+      );
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const replacement = generateDailyPuzzle(mode, dateKey, {
+      excludedFingerprints
     });
+    const updateFilter = { _id: puzzle._id };
+    const versionKey = DailyPuzzle.schema.options.versionKey;
 
-    return puzzle;
-  })();
+    if (puzzle.updatedAt) {
+      updateFilter.updatedAt = puzzle.updatedAt;
+    }
 
-  dailyPuzzleRequests.set(cacheKey, request);
+    if (versionKey) {
+      const version = puzzle[versionKey];
+      updateFilter[versionKey] = Number.isInteger(version)
+        ? version
+        : { $exists: false };
+    } else {
+      const error = new Error(
+        "Today's puzzle cannot be safely repaired without a Mongo version key."
+      );
+      error.statusCode = 503;
+      throw error;
+    }
 
-  try {
-    return await request;
-  } finally {
-    dailyPuzzleRequests.delete(cacheKey);
+    const repairedPuzzle = await DailyPuzzle.findOneAndUpdate(
+      updateFilter,
+      {
+        $set: replacement,
+        $inc: { [versionKey]: 1 }
+      },
+      { new: true, runValidators: true }
+    ).select("+verifiedSolutions");
+
+    if (repairedPuzzle) {
+      puzzle = repairedPuzzle;
+      continue;
+    }
+
+    puzzle = await DailyPuzzle.findOne({ dateKey, mode })
+      .select("+verifiedSolutions");
+
+    if (!puzzle) {
+      const error = new Error("Today's puzzle is temporarily unavailable.");
+      error.statusCode = 503;
+      throw error;
+    }
   }
+
+  const error = new Error(
+    "Today's puzzle changed while resolving a duplicate. Please retry."
+  );
+  error.statusCode = 503;
+  throw error;
 }
 
 module.exports = {
   getPacificDateKey,
-  getDailyPuzzle
+  getDailyPuzzle,
+  ensureDailyPuzzleForDate
 };

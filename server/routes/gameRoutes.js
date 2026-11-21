@@ -100,8 +100,8 @@ async function getTodayProgress(userId) {
   }
 }
 
-async function loadPuzzle(mode) {
-  return getDailyPuzzle(mode);
+async function loadPuzzle(mode, userId) {
+  return getDailyPuzzle(mode, userId);
 }
 
 // GET TODAY'S PROGRESS
@@ -136,7 +136,7 @@ router.get("/puzzle/:mode", protect, async (req, res) => {
       });
     }
 
-    const puzzle = await loadPuzzle(mode);
+    const puzzle = await loadPuzzle(mode, req.user._id);
 
     return res.json({
       success: true,
@@ -166,7 +166,7 @@ router.post("/start", protect, async (req, res) => {
       });
     }
 
-    const puzzle = await loadPuzzle(mode);
+    const puzzle = await loadPuzzle(mode, req.user._id);
     const progress = await getTodayProgress(req.user._id);
     let modeProgress = progress.modes[mode];
 
@@ -270,7 +270,7 @@ router.put("/save", protect, async (req, res) => {
       });
     }
 
-    const puzzle = await loadPuzzle(mode);
+    const puzzle = await loadPuzzle(mode, req.user._id);
     const validation = validatePartialPath(path, puzzle);
 
     if (!validation.valid) {
@@ -331,7 +331,7 @@ router.post("/fail", protect, async (req, res) => {
       });
     }
 
-    const puzzle = await loadPuzzle(mode);
+    const puzzle = await loadPuzzle(mode, req.user._id);
     const validation = validatePartialPath(path, puzzle);
 
     if (!validation.valid) {
@@ -440,7 +440,7 @@ router.post("/complete", protect, async (req, res) => {
       });
     }
 
-    const puzzle = await loadPuzzle(mode);
+    const puzzle = await loadPuzzle(mode, req.user._id);
     const validation = validateCompletedPath(path, puzzle);
 
     if (!validation.valid) {

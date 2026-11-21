@@ -1,13 +1,10 @@
 require("dotenv").config();
 
 const mongoose = require("mongoose");
-const DailyPuzzle = require("../models/DailyPuzzle");
 const {
-  getPacificDateKey
+  getPacificDateKey,
+  ensureDailyPuzzleForDate
 } = require("../services/dailyPuzzleService");
-const {
-  generateDailyPuzzle
-} = require("../generators/puzzleGenerator");
 
 const MODES = ["Easy", "Medium", "Hard", "Challenge"];
 
@@ -25,24 +22,11 @@ async function seedDailyPuzzles() {
     console.log(`Generating puzzles for ${dateKey} (Pacific Time)`);
 
     for (const mode of MODES) {
-      const existing = await DailyPuzzle.findOne({
-        dateKey,
-        mode
-      });
-
-      if (existing) {
-        console.log(`${mode}: already exists. Skipping.`);
-        continue;
-      }
-
-      console.log(`${mode}: generating and verifying...`);
-
-      const puzzle = generateDailyPuzzle(mode, dateKey);
-
-      await DailyPuzzle.create(puzzle);
+      console.log(`${mode}: checking history and generating if needed...`);
+      const puzzle = await ensureDailyPuzzleForDate(mode, dateKey);
 
       console.log(
-        `${mode}: saved with ${puzzle.verifiedRouteCount} verified route(s).`
+        `${mode}: ready with ${puzzle.verifiedRouteCount} verified route(s).`
       );
     }
 
