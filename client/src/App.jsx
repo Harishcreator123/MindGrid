@@ -96,6 +96,9 @@ function App() {
 
   const [bombHit, setBombHit] = useState(null);
   const [flipCell, setFlipCell] = useState(null);
+  // Refs for scrolling
+  const gridRef = useRef(null);
+  const resultRef = useRef(null);
   const modeSwitchInFlight = useRef(false);
 
   const TOTAL_CELLS = puzzle.totalPlayable;
@@ -165,6 +168,16 @@ function App() {
 
     return () => window.clearInterval(interval);
   }, [started, completed, failed]);
+
+  useEffect(() => {
+    if (!completed && !failed) return;
+
+    resultRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+  }, [completed, failed]);
 
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
@@ -395,6 +408,22 @@ function App() {
 
       const firstPath = [index];
       setPath(firstPath);
+
+      const grid = gridRef.current;
+      if (grid) {
+        const gridRect = grid.getBoundingClientRect();
+        const viewportCenter = window.innerHeight / 2;
+        const gridCenter = gridRect.top + gridRect.height / 2;
+        const centerTolerance = window.innerHeight * 0.1;
+
+        if (Math.abs(gridCenter - viewportCenter) > centerTolerance) {
+          grid.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "nearest",
+          });
+        }
+      }
 
       const possible = canCompletePath(firstPath, puzzle);
 
@@ -909,6 +938,7 @@ function App() {
 
               <div
                 className="grid-board"
+                ref={gridRef}
                 style={{
                   gridTemplateColumns: `repeat(${puzzle.size}, minmax(0, 1fr))`,
                 }}
@@ -927,7 +957,7 @@ function App() {
 
               {/* Successful Completion */}
               {completed && (
-                <div className="completion-card">
+                <div className="completion-card" ref={resultRef}>
                   {difficulty === "Challenge" ? (
                     <>
                       <h3>Challenge Completed</h3>
@@ -951,7 +981,7 @@ function App() {
 
               {/* Dead End Result */}
               {failed && (
-                <div className="completion-card">
+                <div className="completion-card" ref={resultRef}>
                   {difficulty === "Challenge" ? (
                     <>
                       <h3>Challenge Attempt Ended</h3>
